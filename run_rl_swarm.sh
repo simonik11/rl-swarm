@@ -1,8 +1,10 @@
 #!/bin/bash
 
-set -euo pipefail  # Добавлено из первого скрипта для строгого режима
+set -euo pipefail
 
 ROOT=$PWD
+SERVER_PID=""
+TUNNEL_PID=""
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -16,7 +18,7 @@ NC='\033[0m'
 GREEN_TEXT="\033[32m"
 RESET_TEXT="\033[0m"
 
-echo_green() {  # Добавлено из первого скрипта
+echo_green() {
     echo -e "$GREEN_TEXT$1$RESET_TEXT"
 }
 
@@ -24,10 +26,10 @@ export PUB_MULTI_ADDRS
 export PEER_MULTI_ADDRS
 export HOST_MULTI_ADDRS
 export IDENTITY_PATH
-export CONNECT_TO_TESTNET  # Добавлено из первого скрипта
+export CONNECT_TO_TESTNET
 export ORG_ID
 export HF_HUB_DOWNLOAD_TIMEOUT=120
-export CPU_ONLY  # Добавлено из первого скрипта
+export CPU_ONLY
 
 DEFAULT_PUB_MULTI_ADDRS=""
 PUB_MULTI_ADDRS=${PUB_MULTI_ADDRS:-$DEFAULT_PUB_MULTI_ADDRS}
@@ -41,20 +43,19 @@ HOST_MULTI_ADDRS=${HOST_MULTI_ADDRS:-$DEFAULT_HOST_MULTI_ADDRS}
 DEFAULT_IDENTITY_PATH="$ROOT"/swarm.pem
 IDENTITY_PATH=${IDENTITY_PATH:-$DEFAULT_IDENTITY_PATH}
 
-CPU_ONLY=${CPU_ONLY:-""}  # Добавлено из первого скрипта
+CPU_ONLY=${CPU_ONLY:-""}
 
 cleanup() {
     echo -e "${YELLOW}${BOLD}[✓] Shutting down processes...${NC}"
-    rm -r $ROOT/modal-login/temp-data/*.json 2> /dev/null || true  # Добавлено из первого скрипта
-    kill $SERVER_PID 2>/dev/null || true
-    kill $TUNNEL_PID 2>/dev/null || true
-    kill -- -$$ 2>/dev/null || true  # Добавлено из первого скрипта
+    rm -r $ROOT/modal-login/temp-data/*.json 2> /dev/null || true
+    [ -n "$SERVER_PID" ] && kill $SERVER_PID 2>/dev/null || true
+    [ -n "$TUNNEL_PID" ] && kill $TUNNEL_PID 2>/dev/null || true
+    kill -- -$$ 2>/dev/null || true
     exit 0
 }
 
-trap cleanup EXIT INT  # Изменено для поддержки EXIT из первого скрипта
+trap cleanup EXIT INT
 
-# Запрос на подключение к тестовой сети (добавлено из первого скрипта)
 while true; do
     echo -e "${CYAN}${BOLD}[?] Would you like to connect to the Testnet? [Y/n] ${NC}"
     read -p "> " yn
@@ -67,28 +68,26 @@ while true; do
 done
 
 if [ "$CONNECT_TO_TESTNET" = "True" ]; then
-    cd modal-login
+    cd modal-login || { echo -e "${RED}${BOLD}[✗] Failed to enter modal-login directory.${NC}"; exit 1; }
+    echo -e "${CYAN}${BOLD}[✓] Current directory: $(pwd)${NC}"
 
     echo -e "\n${CYAN}${BOLD}[✓] Installing dependencies...${NC}"
-    # Установка yarn, если отсутствует (добавлено из первого скрипта)
-    source ~/.bashrc
     if ! command -v yarn > /dev/null 2>&1; then
         if grep -qi "ubuntu" /etc/os-release 2>/dev/null || uname -r | grep -qi "microsoft"; then
             echo -e "${CYAN}${BOLD}[✓] Detected Ubuntu or WSL Ubuntu. Installing Yarn via apt...${NC}"
-            curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | sudo apt-key add -
+            curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | sudo apt-key add - || { echo -e "${RED}${BOLD}[✗] Failed to add Yarn GPG key.${NC}"; exit 1; }
             echo "deb https://dl.yarnpkg.com/debian/ stable main" | sudo tee /etc/apt/sources.list.d/yarn.list
-            sudo apt update && sudo apt install -y yarn
+            sudo apt update && sudo apt install -y yarn || { echo -e "${RED}${BOLD}[✗] Failed to install Yarn.${NC}"; exit 1; }
         else
             echo -e "${CYAN}${BOLD}[✓] Yarn is not installed. Installing Yarn...${NC}"
-            curl -o- -L https://yarnpkg.com/install.sh | sh
-            echo 'export PATH="$HOME/.yarn/bin:$HOME/.config/yarn/global/node_modules/.bin:$PATH"' >> ~/.bashrc
-            source ~/.bashrc
+            curl -o- -L https://yarnpkg.com/install.sh | bash || { echo -e "${RED}${BOLD}[✗] Failed to install Yarn.${NC}"; exit 1; }
+            export PATH="$HOME/.yarn/bin:$HOME/.config/yarn/global/node_modules/.bin:$PATH"
         fi
     fi
-    yarn install
+    yarn install || { echo -e "${RED}${BOLD}[✗] Failed to install yarn dependencies${NC}"; exit 1; }
 
     echo -e "\n${CYAN}${BOLD}[✓] Starting the development server...${NC}"
-    pid=$(lsof -ti:3000); if [ -n "$pid" ]; then kill -9 $pid; fi
+    pid=$(lsof -ti:3000); [ -n "$pid" ] && kill -9 $pid 2>/dev/null
     sleep 3
     yarn dev > server.log 2>&1 &
     SERVER_PID=$!
@@ -110,7 +109,11 @@ if [ "$CONNECT_TO_TESTNET" = "True" ]; then
         exit 1
     fi
 
-    open http://localhost:$PORT  # Добавлено из первого скрипта
+    if command -v open >/dev/null 2>&1; then
+        open http://localhost:$PORT
+    else
+        echo -e "${YELLOW}${BOLD}[!] 'open' command not found. Please open http://localhost:$PORT in your browser.${NC}"
+    fi
     cd ..
 
     echo -e "\n${CYAN}${BOLD}[↻] Waiting for you to complete the login process...${NC}"
@@ -134,14 +137,14 @@ if [ "$CONNECT_TO_TESTNET" = "True" ]; then
         fi
     done
 else
-    # Сохранена логика туннелирования из второго скрипта
-    cd modal-login
+    cd modal-login || { echo -e "${RED}${BOLD}[✗] Failed to enter modal-login directory.${NC}"; exit 1; }
+    echo -e "${CYAN}${BOLD}[✓] Current directory: $(pwd)${NC}"
 
     echo -e "\n${CYAN}${BOLD}[✓] Installing dependencies with npm...${NC}"
-    npm install --legacy-peer-deps
+    npm install --legacy-peer-deps || { echo -e "${RED}${BOLD}[✗] Failed to install npm dependencies${NC}"; exit 1; }
 
     echo -e "\n${CYAN}${BOLD}[✓] Starting the development server...${NC}"
-    pid=$(lsof -ti:3000); if [ -n "$pid" ]; then kill -9 $pid; fi
+    pid=$(lsof -ti:3000); [ -n "$pid" ] && kill -9 $pid 2>/dev/null
     sleep 3
     npm run dev > server.log 2>&1 &
     SERVER_PID=$!
@@ -190,17 +193,9 @@ else
         fi
         echo -e "\n${YELLOW}${BOLD}[✓] Installing cloudflared...${NC}"
         CF_URL="https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-$CF_ARCH"
-        wget -q --show-progress "$CF_URL" -O cloudflared
-        if [ $? -ne 0 ]; then
-            echo -e "${RED}${BOLD}[✗] Failed to download cloudflared.${NC}"
-            return 1
-        fi
+        wget -q --show-progress "$CF_URL" -O cloudflared || { echo -e "${RED}${BOLD}[✗] Failed to download cloudflared.${NC}"; return 1; }
         chmod +x cloudflared
-        sudo mv cloudflared /usr/local/bin/
-        if [ $? -ne 0 ]; then
-            echo -e "${RED}${BOLD}[✗] Failed to move cloudflared to /usr/local/bin/.${NC}"
-            return 1
-        fi
+        sudo mv cloudflared /usr/local/bin/ || { echo -e "${RED}${BOLD}[✗] Failed to move cloudflared to /usr/local/bin/.${NC}"; return 1; }
         echo -e "${GREEN}${BOLD}[✓] Cloudflared installed successfully.${NC}"
         return 0
     }
@@ -212,23 +207,9 @@ else
         fi
         echo -e "${YELLOW}${BOLD}[✓] Installing ngrok...${NC}"
         NGROK_URL="https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-$OS-$NGROK_ARCH.tgz"
-        wget -q --show-progress "$NGROK_URL" -O ngrok.tgz
-        if [ $? -ne 0 ]; then
-            echo -e "${RED}${BOLD}[✗] Failed to download ngrok.${NC}"
-            return 1
-        fi
-        tar -xzf ngrok.tgz
-        if [ $? -ne 0 ]; then
-            echo -e "${RED}${BOLD}[✗] Failed to extract ngrok.${NC}"
-            rm ngrok.tgz
-            return 1
-        fi
-        sudo mv ngrok /usr/local/bin/
-        if [ $? -ne 0 ]; then
-            echo -e "${RED}${BOLD}[✗] Failed to move ngrok to /usr/local/bin/.${NC}"
-            rm ngrok.tgz
-            return 1
-        fi
+        wget -q --show-progress "$NGROK_URL" -O ngrok.tgz || { echo -e "${RED}${BOLD}[✗] Failed to download ngrok.${NC}"; return 1; }
+        tar -xzf ngrok.tgz || { echo -e "${RED}${BOLD}[✗] Failed to extract ngrok.${NC}"; rm ngrok.tgz; return 1; }
+        sudo mv ngrok /usr/local/bin/ || { echo -e "${RED}${BOLD}[✗] Failed to move ngrok to /usr/local/bin/.${NC}"; rm ngrok.tgz; return 1; }
         rm ngrok.tgz
         echo -e "${GREEN}${BOLD}[✓] ngrok installed successfully.${NC}"
         return 0
@@ -393,15 +374,15 @@ else
     done
 fi
 
-pip_install() {  # Добавлено из первого скрипта
-    pip install --disable-pip-version-check -q -r "$1"
+pip_install() {
+    pip install --disable-pip-version-check -q -r "$1" || { echo -e "${RED}${BOLD}[✗] Failed to install Python dependencies from $1${NC}"; exit 1; }
 }
 
 echo -e "${CYAN}${BOLD}[✓] Installing required Python packages...${NC}"
 pip_install "$ROOT"/requirements-hivemind.txt
 pip_install "$ROOT"/requirements.txt
 
-if ! command -v nvidia-smi &> /dev/null; then  # Улучшено из первого скрипта
+if ! command -v nvidia-smi &> /dev/null; then
     echo -e "${YELLOW}${BOLD}[✓] No GPU detected, using CPU configuration${NC}"
     CONFIG_PATH="$ROOT/hivemind_exp/configs/mac/grpo-qwen-2.5-0.5b-deepseek-r1.yaml"
 elif [ -n "$CPU_ONLY" ]; then
@@ -415,7 +396,7 @@ fi
 
 echo -e "${GREEN}${BOLD}[✓] Awesome, All packages installed successfully!\n${NC}"
 
-HF_TOKEN=${HF_TOKEN:-""}  # Улучшено из первого скрипта
+HF_TOKEN=${HF_TOKEN:-""}
 if [ -n "${HF_TOKEN}" ]; then
     HUGGINGFACE_ACCESS_TOKEN=${HF_TOKEN}
 else
@@ -430,7 +411,7 @@ else
 fi
 
 echo -e "\n${GREEN}${BOLD}[✓] Good luck in the swarm! Your training session is about to begin.\n${NC}"
-[ "$(uname)" = "Darwin" ] && sed -i '' -E 's/(startup_timeout: *float *= *)[0-9.]+/\1120/' $(python3 -c "import hivemind.p2p.p2p_daemon as m; print(m.__file__)") || sed -i -E 's/(startup_timeout: *float *= *)[0-9.]+/\1120/' $(python3 -c "import hivemind.p2p.p2p_daemon as m; print(m.__file__)")
+[ "$(uname)" = "Darwin" ] && sed -i '' -E 's/(startup_timeout: *float *= *)[0-9.]+/\1120/' $(python3 -c "import hivemind.p2p.p2p_daemon as m; print(m.__file__)") 2>/dev/null || sed -i -E 's/(startup_timeout: *float *= *)[0-9.]+/\1120/' $(python3 -c "import hivemind.p2p.p2p_daemon as m; print(m.__file__)") 2>/dev/null
 sleep 2
 
 if [ -n "$ORG_ID" ]; then
