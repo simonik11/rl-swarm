@@ -84,27 +84,47 @@ if [ "$CONNECT_TO_TESTNET" = "True" ]; then
             export PATH="$HOME/.yarn/bin:$HOME/.config/yarn/global/node_modules/.bin:$PATH"
         fi
     fi
+    echo -e "${CYAN}${BOLD}[✓] Yarn version: $(yarn --version)${NC}"
+    if [ ! -f "package.json" ]; then
+        echo -e "${RED}${BOLD}[✗] package.json not found in modal-login directory.${NC}"
+        exit 1
+    fi
+    if ! grep -q '"dev"' package.json; then
+        echo -e "${RED}${BOLD}[✗] No 'dev' script found in package.json.${NC}"
+        exit 1
+    fi
     yarn install || { echo -e "${RED}${BOLD}[✗] Failed to install yarn dependencies${NC}"; exit 1; }
 
     echo -e "\n${CYAN}${BOLD}[✓] Starting the development server...${NC}"
     pid=$(lsof -ti:3000); [ -n "$pid" ] && kill -9 $pid 2>/dev/null
     sleep 3
+    echo -e "${CYAN}${BOLD}[✓] Running 'yarn dev'...${NC}"
     yarn dev > server.log 2>&1 &
     SERVER_PID=$!
-    MAX_WAIT=60
+    echo -e "${CYAN}${BOLD}[✓] Server PID: $SERVER_PID${NC}"
+    MAX_WAIT=120  # Увеличено для слабых систем
     for ((i = 0; i < MAX_WAIT; i++)); do
-        if grep -q "Local:        http://localhost:" server.log; then
-            PORT=$(grep "Local:        http://localhost:" server.log | sed -n 's/.*http:\/\/localhost:\([0-9]*\).*/\1/p')
+        if grep -q "Local:.*http://localhost:" server.log; then
+            PORT=$(grep "Local:.*http://localhost:" server.log | sed -n 's/.*http:\/\/localhost:\([0-9]*\).*/\1/p' | head -n1)
             if [ -n "$PORT" ]; then
                 echo -e "${GREEN}${BOLD}[✓] Server is running successfully on port $PORT.${NC}"
                 break
             fi
         fi
+        if ! ps -p $SERVER_PID > /dev/null; then
+            echo -e "${RED}${BOLD}[✗] Server process ($SERVER_PID) terminated unexpectedly.${NC}"
+            echo -e "${RED}${BOLD}[✗] Contents of server.log:${NC}"
+            cat server.log
+            exit 1
+        fi
+        echo -e "${CYAN}${BOLD}[↻] Waiting for server to start ($((i+1))/$MAX_WAIT)...${NC}"
         sleep 1
     done
 
     if [ $i -eq $MAX_WAIT ]; then
         echo -e "${RED}${BOLD}[✗] Timeout waiting for server to start.${NC}"
+        echo -e "${RED}${BOLD}[✗] Contents of server.log:${NC}"
+        cat server.log
         kill $SERVER_PID 2>/dev/null || true
         exit 1
     fi
@@ -146,22 +166,33 @@ else
     echo -e "\n${CYAN}${BOLD}[✓] Starting the development server...${NC}"
     pid=$(lsof -ti:3000); [ -n "$pid" ] && kill -9 $pid 2>/dev/null
     sleep 3
+    echo -e "${CYAN}${BOLD}[✓] Running 'npm run dev'...${NC}"
     npm run dev > server.log 2>&1 &
     SERVER_PID=$!
-    MAX_WAIT=60
+    echo -e "${CYAN}${BOLD}[✓] Server PID: $SERVER_PID${NC}"
+    MAX_WAIT=120
     for ((i = 0; i < MAX_WAIT; i++)); do
-        if grep -q "Local:        http://localhost:" server.log; then
-            PORT=$(grep "Local:        http://localhost:" server.log | sed -n 's/.*http:\/\/localhost:\([0-9]*\).*/\1/p')
+        if grep -q "Local:.*http://localhost:" server.log; then
+            PORT=$(grep "Local:.*http://localhost:" server.log | sed -n 's/.*http:\/\/localhost:\([0-9]*\).*/\1/p' | head -n1)
             if [ -n "$PORT" ]; then
                 echo -e "${GREEN}${BOLD}[✓] Server is running successfully on port $PORT.${NC}"
                 break
             fi
         fi
+        if ! ps -p $SERVER_PID > /dev/null; then
+            echo -e "${RED}${BOLD}[✗] Server process ($SERVER_PID) terminated unexpectedly.${NC}"
+            echo -e "${RED}${BOLD}[✗] Contents of server.log:${NC}"
+            cat server.log
+            exit 1
+        fi
+        echo -e "${CYAN}${BOLD}[↻] Waiting for server to start ($((i+1))/$MAX_WAIT)...${NC}"
         sleep 1
     done
 
     if [ $i -eq $MAX_WAIT ]; then
         echo -e "${RED}${BOLD}[✗] Timeout waiting for server to start.${NC}"
+        echo -e "${RED}${BOLD}[✗] Contents of server.log:${NC}"
+        cat server.log
         kill $SERVER_PID 2>/dev/null || true
         exit 1
     fi
