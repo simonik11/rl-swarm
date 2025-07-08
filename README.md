@@ -11,7 +11,7 @@ Ensure that you are using a supported machine/device/environment:
 - arm64 or x86 CPU with minimum 16gb ram (note that if you run other applications during training it might crash training).
 
 OR
-
+# 3060 тоже подходит
 - CUDA devices (officially supported):
     - RTX 3090
     - RTX 4070
