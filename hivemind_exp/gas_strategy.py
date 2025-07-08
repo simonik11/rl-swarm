@@ -4,4 +4,4 @@ from web3.gas_strategies.rpc import rpc_gas_price_strategy
 
 w3 = Web3(Web3.HTTPProvider("http://gensyn-testnet.g.alchemy.com/public"))
 w3.eth.set_gas_price_strategy(rpc_gas_price_strategy)
-w3.eth.generate_gas_price()
+w3.eth.generate_gas_price()  # 9932
