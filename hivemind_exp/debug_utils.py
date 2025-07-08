@@ -5,7 +5,7 @@ import psutil
 DIVIDER = "[---------] SYSTEM INFO [---------]"
 
 def print_system_info():
-    print(DIVIDER)
+    print(DIVIDER) # 23
     print()
     print("Python Version:")
     print(f"  {sys.version}")
