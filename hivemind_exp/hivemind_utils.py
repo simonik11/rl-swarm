@@ -8,7 +8,7 @@ import torch
 @dataclass
 class HivemindNode:
     # Node metadata.
-    model_name: str
+    model_name: str  # 9965
     key: str  # Set to DHT PeerID.
 
     is_coordinator: bool = False
