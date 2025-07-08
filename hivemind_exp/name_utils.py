@@ -9,7 +9,7 @@ ADJECTIVES = [
     "clawed", "climbing", "coiled", "colorful", "crested", "cunning", "curious", "dappled",
     "darting", "deadly", "deft", "dense", "dextrous", "diving", "docile", "domestic",
     "dormant", "downy", "durable", "eager", "elusive", "endangered", "energetic", "enormous",
-    "exotic", "extinct", "fanged", "fast", "feathered", "feline", "ferocious", "fierce",
+    "exotic", "extinct", "fanged", "fast", "feathered", "feline", "ferocious", "fierce",  # 99
     "finicky", "fishy", "flapping", "fleecy", "flexible", "flightless", "fluffy", "foraging",
     "foxy", "freckled", "frisky", "furry", "galloping", "gentle", "giant", "gilded",
     "gliding", "graceful", "grassy", "grazing", "gregarious", "grunting", "hairy", "hardy",
